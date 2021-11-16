@@ -1,0 +1,89 @@
+library(leaps)
+library(quantmod)
+library(quadprog)
+
+# Generate preliminary dataset
+# symbols = c("QQQ","FEZ","AIA", "VNQ", "IQQP.DE", "UUP", "FXE", "FXY", "FXNAX", "SEGA.MI")
+# yret = getSymbols(symbols,src="yahoo",auto.assign=T)
+# yret = cbind(QQQ,FEZ,AIA,VNQ,IQQP.DE,UUP,FXE,FXY,FXNAX,SEGA.MI)
+# ydata = na.omit(subset(yret,index(yret)>="2011-06-01"&index(yret)<="2021-05-31'"))
+# ydata = ydata[ , c(6, 12, 18, 24, 30, 36, 42, 48, 54, 60)]
+# dim(ydata)
+# write.csv(ydata,"G:/My Drive/DSA302 - FDA/project.csv", row.names = TRUE)
+
+###########################################################
+# Read dataset
+setwd("G:/My Drive/DSA302 - FDA/Group Project")
+df = read.csv("Prices_NEW.csv", header = TRUE)
+head(df)
+
+class(df$Date)
+date=as.Date(df$Date,format="%m/%d/%Y")
+df=cbind(date,df[,-1])
+head(df)
+
+class(df$date)
+df.xts=xts(df[,2:7],order.by=df[,1])
+head(df.xts)
+dim(df.xts)
+row.names(df.xts)
+
+ret = diff(log(df.xts))
+ret = na.omit(ret)
+R = ret*100
+
+# Portfolio 2 Optimisation
+mean = apply(R,2,mean)
+cov = cov(R)
+amat = cbind(rep(1,6),mean,diag(1,nrow=6))
+wts = matrix(0,nrow=500,ncol=6)
+muP = seq(min(mean)+0.0001,max(mean)-0.0001,length=500)
+sdP = muP  
+
+for (i in 1:length(muP)){
+  bvec=c(1,muP[i],rep(0,6))
+  result = solve.QP(Dmat=2*cov, dvec=rep(0,6), Amat=amat,
+                    bvec = bvec, meq=2)
+  sdP[i] = sqrt(result$value)
+  wts[i,] = result$solution
+}
+wts <- round(wts, 6)
+colnames(wts) = c('QQQ','UUP','FXE','FXY','FXNAX','SEGA.MI')
+tail(wts)
+
+par(mfrow = c(1,1))
+plot(sdP,muP,type="l",xlim=c(0,2.5),ylim=c(0,0.15),lty=3) 
+
+
+# 3-months Treasury Rate as of 7 Nov 2021
+rfr = 0.05/252
+points(0,rfr,cex=1.5,pch="*",col="red")  
+SR=(muP-rfr)/sdP
+ind=(SR==max(SR)) 
+options(digits=3)
+
+
+# Print weights of the tangency portfolio
+wts[ind,]
+sdP[ind]
+muP[ind]
+lines(c(0,2.5),rfr+c(0,2.5)*(muP[ind]-rfr)/sdP[ind],
+      lwd=1.5,lty=1,col="blue")
+points(sdP[ind],muP[ind],cex=1.5,pch="*",col="red")
+
+# Show global minimum variance portfolio and plot efficient frontier
+ind2 = (sdP == min(sdP))
+points(sdP[ind2],muP[ind2],cex=1.5,pch="+") 
+ind3 = (muP > muP[ind2])
+
+lines(sdP[ind3],muP[ind3],type="l",xlim=c(0,0.25),
+      ylim=c(0,.15),lwd=1.5,col="red")
+ind4=!ind3
+lines(sdP[ind4],muP[ind4],type="l",xlim=c(0,0.25),
+      ylim=c(0,.15),lwd=1.5,col="green") 
+text(0.42,rfr,"Risk free rate",cex=0.8)
+
+# Annualised US CPI inflation rate as of May 2021 = 5%
+cpi = 5/252
+abline(h = cpi, col="orange")
+text(1.5, cpi + 0.01, "daily inflation rate", srt=0.2, col="orange")

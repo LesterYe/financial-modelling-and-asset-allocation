@@ -1,0 +1,292 @@
+
+Loading of libraries
+```{r}
+library(quantmod)
+library(purrr)
+library(xts)
+library(quadprog)
+library(ggplot2)
+library(psych)
+library(dplyr)
+```
+
+Data
+```{r}
+setwd("G:/My Drive/DSA302 - FDA/Group Project")
+prices = read.csv('Prices.csv')
+Date = as.Date(prices$Date,format='%Y-%m-%d')
+prices.df = cbind.data.frame(Date, prices[,-1])
+prices.xts = xts(prices[,-1],order.by=Date)
+ret.xts = diff(log(prices.xts))
+ret.xts = na.omit(ret.xts) 
+R = ret.xts*100 
+
+prices.1 <- read.csv('Prices_NEW.csv')
+Date = as.Date(prices.1$Date,format='%m/%d/%Y')
+prices.df.1 = cbind.data.frame(Date, prices.1[,-1])
+prices.xts.1 = xts(prices.df.1[,-1],order.by=Date)
+ret.1 = diff(log(prices.xts.1))
+ret.1 = na.omit(ret.1) #2241 observations
+R.new = ret.1*100
+```
+
+
+Portfolio 1 optimisation
+```{r}
+options(digits=5)
+mean = apply(R,2,mean) #10x1 vector
+cov = cov(R)  #10x10 variance-covariance matrix
+amat.constraint1 = rep(1,10)  
+amat.constraint2 = mean
+amat.constraint3 = diag(1,nrow=10)
+amat = cbind(amat.constraint1,amat.constraint2,amat.constraint3)
+bvec.constraint1 = 1
+#bvec.constraint2 = muP[i]
+bvec.constraint3 = c(0,0,0,0,0,0,0,0,0,0)
+wts = matrix(0,nrow=500,ncol=10)
+muP = seq(min(mean)+0.0001,max(mean)-0.0001,length=500)
+sdP = muP #initialise sdP 
+
+for (i in 1:length(muP)){
+  bvec=c(1,muP[i],bvec.constraint3)
+  result = solve.QP(Dmat=2*cov, dvec=rep(0,10), Amat=amat,
+                    bvec = bvec, meq=2)
+  sdP[i] = sqrt(result$value)
+  wts[i,] = result$solution
+}
+wts <- round(wts, 8)
+colnames(wts) = c('QQQ','FEZ','AIA','VNQ','IQQP.DE','UUP','FXE','FXY','FXNAX','SEGA.MI')
+```
+
+MVF for portfolio 1
+```{r}
+par(mfrow =c(1,1))
+range(sdP) #0.06, 1.32
+range(muP) #-0.02, 0.08
+plot(sdP,muP,type='l',xlim=c(0,1.4), ylim=c(-0.02,0.2), lty=3, main = 'Plot of MVF of Portfolio 1')
+points(sdP[ind],muP[ind],cex=1.5,pch='+')
+ind = (sdP==min(sdP))
+c(sdP[ind],muP[ind]) #min port sd = 0.062, min port return = 0.0004
+c(sdP[muP==max(muP)],muP[muP==max(muP)]) #1.316867 max portfolio return =0.083633
+```
+
+Global minimum point (sd,mu) = (0.062,0.0004)
+
+MVF for only equities and bonds
+```{r}
+R.1 = R[,c(1,2,3,9,10)]
+mean.1 = apply(R.1,2,mean) 
+cov.1 = cov(R.1)
+amat.1 = cbind(rep(1,5),mean.1,diag(1,nrow=5))
+wts.1 = matrix(0,nrow=500,ncol=5)
+muP.1 = seq(min(mean.1)+0.0001,max(mean.1)-0.0001,length=500)
+sdP.1 = muP.1
+
+for (i in 1:length(muP.1)){
+  bvec=c(1,muP.1[i],rep(0,5))
+  result = solve.QP(Dmat=2*cov.1, dvec=rep(0,5), Amat=amat.1,
+                    bvec = bvec, meq=2)
+  sdP.1[i] = sqrt(result$value)
+  wts.1[i,] = result$solution
+}
+wts.1 <- round(wts.1, 8)
+colnames(wts.1) = c('QQQ','FEZ','AIA','FXNAX','SEGA.MI')
+
+par(mfrow =c(1,1))
+range(sdP.1) #0.2, 1.32
+range(muP.1) #0.02, 0.08
+ind.1 = (sdP.1==min(sdP.1))
+plot(sdP,muP,type='l',xlim=c(0,1.4), ylim=c(-0.02,0.2), lty=3, main = 'MVF Comparison')
+points(sdP[ind],muP[ind],cex=1.5,pch='+')
+lines(sdP.1,muP.1,type='l', lty=3, col='red')
+points(sdP.1[ind.1],muP.1[ind.1],cex=1.5,pch='x')
+c(sdP.1[ind.1],muP.1[ind.1]) 
+c(sdP.1[muP.1==max(muP.1)],muP.1[muP.1==max(muP.1)]) #1.316867 max portfolio return =0.084
+
+```
+Global minimum point (sd,mu) for equities and bonds only portfolio = (0.2,0.015)
+
+
+MVF for only equitieS, bonds and currencies
+```{r}
+R.2 = R[,c(1,2,3,6,7,8,9,10)]
+mean.2 = apply(R.2,2,mean) 
+cov.2 = cov(R.2)
+amat.2 = cbind(rep(1,8),mean.2,diag(1,nrow=8))
+wts.2 = matrix(0,nrow=500,ncol=8)
+muP.2 = seq(min(mean.2)+0.0001,max(mean.2)-0.0001,length=500)
+sdP.2 = muP.2
+
+for (i in 1:length(muP.2)){
+  bvec=c(1,muP.2[i],rep(0,8))
+  result = solve.QP(Dmat=2*cov.2, dvec=rep(0,8), Amat=amat.2,
+                    bvec = bvec, meq=2)
+  sdP.2[i] = sqrt(result$value)
+  wts.2[i,] = result$solution
+}
+wts.2 <- round(wts.2, 8)
+colnames(wts.2) = c('QQQ','FEZ','AIA','UUP','FXE','FXY','FXNAX','SEGA.MI')
+
+par(mfrow =c(1,1))
+range(sdP.2) #0.2, 1.32
+range(muP.2) #0.02, 0.08
+ind.2 = (sdP.2==min(sdP.2))
+plot(sdP,muP,type='l',xlim=c(0,1.4), ylim=c(-0.02,0.2), lty=3, main = 'MVF Comparison')
+points(sdP[ind],muP[ind],cex=1.5,pch='+')
+lines(sdP.1,muP.1,type='l', lty=3, col='red')
+points(sdP.1[ind.1],muP.1[ind.1],cex=1.5,pch='+')
+points(sdP.2[ind.2],muP.2[ind.2],cex=1.5,pch='x')
+c(sdP.2[ind.2],muP.2[ind.2]) 
+
+```
+Global minimum point (sd,mu) for equities and bonds only portfolio = (0.0629,0.0006184)
+
+plot of weights changes
+```{r}
+par(mfrow =c(3,2))
+plot(muP,wts[,1],type='l',lty=3, main='QQQ')
+plot(muP,wts[,2],type='l',lty=3, main='FEZ')
+plot(muP,wts[,3],type='l',lty=3, main='AIA')
+plot(muP,wts[,4],type='l',lty=3, main='VNQ')
+plot(muP,wts[,5],type='l',lty=3, main='IQQP.DE')
+plot(muP,wts[,6],type='l',lty=3, main='UUP')
+par(mfrow=c(2,2))
+plot(muP,wts[,7],type='l',lty=3, main='FXE')
+plot(muP,wts[,8],type='l',lty=3, main='FXY')
+plot(muP,wts[,9],type='l',lty=3, main='FXNAX')
+plot(muP,wts[,10],type='l',lty=3, main='SEGA.MI')
+
+```
+
+
+Asset Sharpe Ratio Calculation
+```{r}
+Sharpe = rep(0,10)
+for (i in 1:10){
+  Sharpe[i] = mean[i]/sqrt(diag(cov)[i]) 
+}
+cbind.data.frame(Sharpe,sqrt(diag(cov)),mean)
+corPlot(cov)
+```
+
+Portfolio 2 Optimisation
+```{r}
+mean.new = apply(R.new,2,mean)
+cov.new = cov(R.new)
+amat.new = cbind(rep(1,6),mean.new,diag(1,nrow=6))
+wts.new = matrix(0,nrow=500,ncol=6)
+muP.new = seq(min(mean.new)+0.0001,max(mean.new)-0.0001,length=500)
+sdP.new = muP.new  
+
+for (i in 1:length(muP.new)){
+  bvec=c(1,muP.new[i],rep(0,6))
+  result = solve.QP(Dmat=2*cov.new, dvec=rep(0,6), Amat=amat.new,
+                    bvec = bvec, meq=2)
+  sdP.new[i] = sqrt(result$value)
+  wts.new[i,] = result$solution
+}
+wts.new <- round(wts.new, 6)
+#colnames(wts.new) = c('QQQ','VGK','MCHI','UUP','FXE','FXY','FXNAX','SEGA.MI')
+colnames(wts.new) = c('QQQ','UUP','FXE','FXY','FXNAX','SEGA.MI')
+
+par(mfrow =c(1,1))
+range(sdP.new) #0.15, 1.10
+range(muP.new) #0, 0.055
+ind.new = (sdP.new==min(sdP.new))
+plot(sdP,muP,type='l',xlim=c(0,1.4), ylim=c(-0.02,0.2), lty=3, main = 'MVF Comparison')
+points(sdP[ind],muP[ind],cex=1.5,pch='+')
+lines(sdP.new,muP.new,type='l', lty=3, col='red')
+points(sdP.new[ind.new],muP.new[ind.new],cex=1.5,pch='x')
+```
+
+```{r}
+par(mfrow =c(3,2))
+plot(muP,wts.new[,1],type='l',lty=3, ylim=c(0,0.5), main='QQQ')
+plot(muP,wts.new[,2],type='l',lty=3, ylim=c(0,0.5), main='UUP')
+plot(muP,wts.new[,3],type='l',lty=3, ylim=c(0,0.5), main='FXE')
+plot(muP,wts.new[,4],type='l',lty=3, ylim=c(0,0.5), main='FXNAX')
+plot(muP,wts.new[,5],type='l',lty=3, ylim=c(0,0.5), main='FXY')
+plot(muP,wts.new[,6],type='l',lty=3, ylim=c(0,0.5), main='SEGA.MI')
+
+
+```
+
+Asset Sharpe Ratio Calculation
+```{r}
+Sharpe.new = rep(0,6)
+for (i in 1:6){
+  Sharpe.new[i] = mean.new[i]/sqrt(diag(cov.new)[i]) 
+}
+cbind.data.frame(Sharpe.new,sqrt(diag(cov.new)),mean.new)
+corPlot(cov.new)
+```
+
+
+Implementing Holding Constraints: Limiting equities to 0.1
+```{r}
+mean.test = apply(R.new,2,mean)
+cov.test = cov(R.new)
+amat.test_3 = diag(1,nrow=6)
+amat.test_3[1,1] = -1
+amat.test = cbind(rep(1,6),mean.test,amat.test_3)
+wts.test = matrix(0,nrow=500,ncol=6)
+muP.test = seq(0,0.02,length=500)
+sdP.test = muP.test  
+
+for (i in 1:length(muP.test)){
+  bvec=c(1,muP.test[i],c(-0.1,0,0,0,0,0))
+  result = solve.QP(Dmat=2*cov.test, dvec=rep(0,6), Amat=amat.test,
+                    bvec = bvec, meq=2)
+  sdP.test[i] = sqrt(result$value)
+  wts.test[i,] = result$solution
+}
+wts.test <- round(wts.test, 6)
+colnames(wts.test) = c('QQQ','UUP','FXE','FXY','FXNAX','SEGA.MI')
+ind.test = (sdP.test==min(sdP.test))
+```
+
+
+Create unconstraint portfolio for comparison for same range of muP
+```{r}
+wts.new = matrix(0,nrow=500,ncol=6)
+muP.new = seq(0,0.02,length=500)
+sdP.new = muP.new  
+
+for (i in 1:length(muP.new)){
+  bvec=c(1,muP.new[i],rep(0,6))
+  result = solve.QP(Dmat=2*cov.new, dvec=rep(0,6), Amat=amat.new,
+                    bvec = bvec, meq=2)
+  sdP.new[i] = sqrt(result$value)
+  wts.new[i,] = result$solution
+}
+wts.new <- round(wts.new, 6)
+colnames(wts.new) = c('QQQ','UUP','FXE','FXY','FXNAX','SEGA.MI')
+ind.new = (sdP.new==min(sdP.new))
+
+
+```
+
+```{r}
+plot(sdP.new,muP.new,type='l',xlim=c(0,0.6), ylim=c(-0.02,0.02), lty=3, main = 'MVF Comparison: 10% equity holding constraint vs no constraint')
+points(sdP.new[ind.new],muP.new[ind.new],cex=1.5,pch='+')
+lines(sdP.test,muP.test,type='l', lty=3, col='red')
+points(sdP.test[ind.test],muP.test[ind.test],cex=1.5,pch='x')
+```
+
+```{r}
+par(mfrow =c(3,2))
+plot(muP.new,wts.new[,1],type='l',lty=3, xlim=c(0,0.02), main='QQQ')
+lines(muP.test,wts.test[,1],type='l',col='red')
+plot(muP,wts.new[,2],type='l',lty=3, xlim=c(0,0.02), main='UUP')
+lines(muP.test,wts.test[,2],type='l',col='red')
+plot(muP,wts.new[,3],type='l',lty=3, xlim=c(0,0.02), main='FXE')
+lines(muP.test,wts.test[,3],type='l',col='red')
+plot(muP,wts.new[,4],type='l',lty=3, xlim=c(0,0.02), main='FXNAX')
+lines(muP.test,wts.test[,4],type='l',col='red')
+plot(muP,wts.new[,5],type='l',lty=3, xlim=c(0,0.02), main='FXY')
+lines(muP.test,wts.test[,4],type='l',col='red')
+plot(muP,wts.new[,6],type='l',lty=3, xlim=c(0,0.02), main='SEGA.MI')
+lines(muP.test,wts.test[,6],type='l',col='red')
+```
+
+
